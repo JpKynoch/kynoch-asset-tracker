@@ -492,6 +492,8 @@ let lastSearchResults = [];
 // ══════════════════════════════════════════════════════
 window.onload = async () => {
   toggleUserFields();
+  const hasAuthCode = window.location.hash.includes('code') || window.location.search.includes('code');
+  if (hasAuthCode) setSpinner(true, 'Completing sign-in…');
   try {
     msalApp = new msal.PublicClientApplication({
       auth: {
@@ -502,24 +504,26 @@ window.onload = async () => {
       cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
     });
     await msalApp.initialize();
-    // Handle redirect response (coming back from Microsoft login page)
-    let resp = null;
-    try { resp = await msalApp.handleRedirectPromise(); } catch(e) { console.warn('Redirect promise:', e); }
+    // Process the auth code returned by Microsoft in the URL
+    const resp = await msalApp.handleRedirectPromise();
     if (resp && resp.account) {
       currentAccount = resp.account;
       await afterSignIn();
       return;
     }
-    // Check if already signed in from a previous session
+    // Check for existing cached session
     const accounts = msalApp.getAllAccounts();
     if (accounts.length > 0) {
       currentAccount = accounts[0];
       setSpinner(true, 'Restoring session…');
       await afterSignIn();
+      return;
     }
+    setSpinner(false);
   } catch(e) {
-    console.warn('MSAL init error:', e);
-    // Don't show error on init - user can still click sign in
+    console.error('MSAL error:', e);
+    setSpinner(false);
+    if (hasAuthCode) showErr('Sign-in error: ' + e.message);
   }
 };
 
