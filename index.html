@@ -202,7 +202,7 @@ textarea{resize:vertical;min-height:68px;}
       <svg viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#F25022"/><rect x="11" y="1" width="9" height="9" fill="#7FBA00"/><rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/></svg>
       Sign in with Microsoft
     </button>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:12px;">A Microsoft sign-in popup will appear.<br>Allow popups for this site if prompted.</p>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:12px;">You will be redirected to Microsoft to sign in,<br>then brought back automatically.</p>
     <div id="loginError" style="color:#c0392b;font-size:12px;margin-top:12px;display:none;"></div>
     <div id="loginSpinner" style="display:none;margin-top:14px;font-size:13px;color:#5a6480;"></div>
   </div>
@@ -529,9 +529,8 @@ window.onload = async () => {
 async function doSignIn() {
   document.getElementById('signInBtn').disabled = true;
   document.getElementById('loginError').style.display = 'none';
-  setSpinner(true, 'Signing in…');
+  setSpinner(true, 'Redirecting to Microsoft…');
   try {
-    // Ensure MSAL is ready
     if (!msalApp) {
       msalApp = new msal.PublicClientApplication({
         auth: {
@@ -543,20 +542,8 @@ async function doSignIn() {
       });
       await msalApp.initialize();
     }
-    const loginRequest = { scopes: ['Files.ReadWrite', 'User.Read'] };
-    try {
-      const resp = await msalApp.loginPopup(loginRequest);
-      currentAccount = resp.account;
-      await afterSignIn();
-    } catch(popupErr) {
-      console.warn('Popup failed, trying redirect:', popupErr.message);
-      // Only redirect if it's a popup-blocked error, not a user-cancel
-      if (popupErr.errorCode === 'popup_window_error' || popupErr.message.includes('popup')) {
-        await msalApp.loginRedirect(loginRequest);
-      } else {
-        throw popupErr;
-      }
-    }
+    // Always use redirect — works everywhere, no popup issues
+    await msalApp.loginRedirect({ scopes: ['Files.ReadWrite', 'User.Read'] });
   } catch(e) {
     showErr('Sign-in failed: ' + (e.message || e));
     document.getElementById('signInBtn').disabled = false;
@@ -606,11 +593,11 @@ async function getToken() {
     });
     return r.accessToken;
   } catch(e) {
-    const r = await msalApp.acquireTokenPopup({
+    // Silent failed — redirect to re-authenticate
+    await msalApp.acquireTokenRedirect({
       scopes: ['Files.ReadWrite', 'User.Read'],
       account: currentAccount
     });
-    return r.accessToken;
   }
 }
 
